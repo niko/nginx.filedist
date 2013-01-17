@@ -8,7 +8,7 @@ When running nginx with the generated configuration files you basically get a HT
 We where looking for a solution to get uploaded MP3s onto our streaming backends. Files are accessed on the streaming backends via the normal filesystem. Top requirement was:
 
 * Local access throughput must not be compromised by remote management:
-  * Local access throughput over consitency.
+  * Local access throughput over local consitency.
   * Local access throughput over remote availability.
   * Local access throughput over remote concurrency.
   * Local access throughput over remote throughput.
@@ -18,12 +18,13 @@ Further properties:
 * Fileservers are organised in a tree with one master endpoint, the root.
 * Software on parent node and child nodes is identical.
 * No action is required on the parent node after child node reboot.
-* PUTs and DELETEs which fail to get distributed to the child nodes are written a HTML log to a file which then can be crawled (e.g. by wget) to catch up.
-* For provisioning of a new machine you can generate one (or many) html file with links to all the files. How the file is created depends on your needs. This file can then be crawled (e.g. by wget). Consider throttling wget when doing this.
+* PUTs and DELETEs which fail to get distributed to the child nodes are written a HTML log to a file at `/__missing__` which then can be crawled (e.g. by wget) to catch up.
+* For provisioning of a new machine you can generate one (or many) html file with links to all the files and put it into `/__index__`. How the file is created depends on your needs. This file can then be crawled (e.g. by wget). Consider throttling wget when doing this.
+* Example commands for PUT and DELETE, catch up and provisioning are available at `/__readme.txt`
 
 The bad and the ugly:
 
-* Needs a client_body_buffer_size as large as your largest files. The whole file is kept in memory. That's 25MB in our case which is not an issue. Really large files will be a problem. I considered using the upload module and a systemcall for subrequests to avoid this.
+* Needs a client_body_buffer_size as large as your largest files. The whole file is kept in memory. That's 25MB in our case which is not an issue. Really large files will be a problem. I considered using the upload module and a systemcall for subrequests to avoid this. As we didn't really need this I left it as (for now).
 
 Synopsis:
 
