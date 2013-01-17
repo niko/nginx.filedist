@@ -13,7 +13,8 @@ We where looking for a solution to get uploaded MP3s onto our streaming backends
   * Local access throughput over remote concurrency.
   * Local access throughput over remote throughput.
 
-Requirements:
+Requirements
+------------
 
 * [nginx](http://wiki.nginx.org/Main)
   * [HttpEchoModule](http://wiki.nginx.org/HttpEchoModule)
@@ -21,7 +22,8 @@ Requirements:
 * [Ruby](http://www.ruby-lang.org/)
 * [wget](http://www.gnu.org/software/wget/)
 
-Features:
+Features
+--------
 
 * Fileservers are organised in a tree with one master endpoint, the root and as many children as you like.
 * Children may have children theirself.
@@ -32,7 +34,8 @@ Features:
 * Catch up for missing files can happen via HTTP crawling of the missing logs.
 * Provisioning of new boxes can happen via HTTP crawling of index files.
 
-Techical Details:
+Techical Details
+----------------
 
 * PUT requests body gets written to the file corresponding to the URL and get broadcasted to all child nodes.
 * DELETE requests delete the file corresponding to the URL and get broadcasted to all child nodes.
@@ -41,11 +44,13 @@ Techical Details:
 * For provisioning of a new machine you can generate one (or many) html file with links to all the files and put it into `/__index__`. How the file is created depends on your needs. This file can then be crawled (e.g. by wget). Consider throttling wget when doing this.
 * Example commands for PUT and DELETE, catch up and provisioning are available at `/__readme.txt`
 
-The bad and the ugly:
+The bad and the ugly
+--------------------
 
 * Needs a client_body_buffer_size as large as your largest files. The whole file is kept in memory. That's 25MB in our case which is not an issue. Really large files will be a problem. This is a problem induced by my the implementation, not by the concept. I considered using the upload module and a systemcall for subrequests to avoid this. As we didn't really need this I left it as (for now).
 
-Synopsis:
+Synopsis
+--------
 
     nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo2 -p /export/webroot/lautfm/var/ -s localhost:8082 conf/nginx.conf.erb > conf/nginx-child2.conf
     nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo1 -p /export/webroot/lautfm/var/ -s localhost:8081 conf/nginx.conf.erb > conf/nginx-child1.conf
