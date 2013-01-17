@@ -27,9 +27,9 @@ The bad and the ugly:
 
 Synopsis:
 
-nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo2 -p /export/webroot/lautfm/var/ -s localhost:8082 conf/nginx.conf.erb > conf/nginx-child2.conf
-nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo1 -p /export/webroot/lautfm/var/ -s localhost:8081 conf/nginx.conf.erb > conf/nginx-child1.conf
-nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo -p /export/webroot/lautfm/var/ -s localhost:8080 -c localhost:8081,localhost:8082 conf/nginx.conf.erb > conf/nginx-master.conf
+    nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo2 -p /export/webroot/lautfm/var/ -s localhost:8082 conf/nginx.conf.erb > conf/nginx-child2.conf
+    nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo1 -p /export/webroot/lautfm/var/ -s localhost:8081 conf/nginx.conf.erb > conf/nginx-child1.conf
+    nginx.filedist -u niko -i /tmp/nginx.[SERVERNAME].pid -l /tmp -r /tmp/foo -p /export/webroot/lautfm/var/ -s localhost:8080 -c localhost:8081,localhost:8082 conf/nginx.conf.erb > conf/nginx-master.conf
 
 
 
