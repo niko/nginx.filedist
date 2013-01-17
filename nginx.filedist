@@ -1,0 +1,99 @@
+#!/usr/bin/env ruby
+
+require 'erb'
+require 'trollop'
+require 'ostruct'
+require 'uri'
+
+conf = Trollop::options do
+  banner <<-EOS
+  Generates the nginx.conf file for nginx.file_replicator
+  
+  Usage:
+         nginx.file_replicator [options] <template_file>
+  where [options] are:
+  EOS
+  
+  opt :root,          "where in the filesystem is the document root",                     :default => '/'
+  opt :server,        "server name. e.g. localhost:8080",                                 :type => :string
+  opt :child_nodes,   "comma separated child nodes. e.g. localhost:8081,localhost:8082",  :type => :string
+  opt :path_prefix,   "path prefix which is enforced",                                    :type => :string
+  opt :log_dir,       "directory for access, error and transfer log",                     :default => '/var/log/nginx/'
+  opt :pid,           "pidfile location",                                                 :default => '/var/run/nginx.[SERVERNAME].pid'
+  opt :user,          "nginx user",                                                       :default => 'www-data'
+  opt :max_body_size, "maximum upload body size",                                         :default => '30m'
+end
+
+conf[:child_nodes] = conf[:child_nodes] ? conf[:child_nodes].split(',') : []
+conf[:template_file] = ARGV.last
+conf[:pid]        = conf[:pid].gsub '[SERVERNAME]', conf[:server]
+
+Trollop::die :server, "must be given" unless conf[:server]
+
+conf = OpenStruct.new conf
+
+lua_util_functions = <<-EOF
+function log(filename, msg)
+  local dir = filename:gsub("/[^/]*$", "")
+  os.execute("mkdir -p " .. dir)
+  
+  local file = io.open(filename, "a+")
+    file:write(os.date("%Y-%m-%d %H-%M-%S") .. " " .. msg .. "\\\n")
+  file:close()
+end
+function transfer_log(msg)
+  log("#{ File.join conf.log_dir, conf.server }.transfer.log", msg)
+end
+function log_error(child_node, msg)
+  log("#{ File.join conf.root, '__missing__' }/" .. child_node .. "/" .. os.date("%Y-%m-%d") .. ".log.html", msg .. "<br>")
+end
+function linkify(url)
+  return "<a href=\\\\"" .. url .. "\\\\">" .. url .. "</a>"
+end
+EOF
+
+template_file, root, server, *child_nodes = *ARGV
+
+conf.readme = <<-EOR
+################################################################################################
+############## README ##########################################################################
+############## this will also be served at <%= File.join 'http://', conf.server, '__readme.txt' %>
+################################################################################################
+# Save a file:
+curl -i --upload-file PATH_TO_SOMEFILE <%= File.join 'http://', conf.server, conf.path_prefix, 'some/path/file.mp3' %>
+
+# Delete a file:
+curl -i -XDELETE <%=File.join 'http://', conf.server, conf.path_prefix, 'some/path/file.mp3' %>
+
+# Download all files to a new box:
+wget --recursive --level=20 --no-host-directories --cut-dirs=2 --no-parent --reject "index.html*" <%=File.join 'http://', conf.server, conf.path_prefix %>
+# You have to adopt the --cut-dirs option to the path you're currently in.
+# Maybe you'll want to remove empty directories afterwards (or even better before on each of the nodes ;-):
+find . -type d -empty -exec rmdir {} \;
+
+<% unless conf.child_nodes.empty? %><% conf.child_nodes.each do |child_node| %>
+# Get missing files for <%= child_node %> for <%= Time.now.strftime '%Y-%m-%d' %>:
+wget --recursive --level=20 --no-host-directories --cut-dirs=2 --no-parent --reject "index.html*" <%=File.join 'http://', conf.server, '__missing__', child_node, Time.now.strftime('%Y-%m-%d') %>.log.html
+# Get missing files for <%= child_node %> for today:
+wget --recursive --level=20 --no-host-directories --cut-dirs=2 --no-parent --reject "index.html*" <%=File.join 'http://', conf.server, '__missing__', child_node, '\`date +%Y-%m-%d\`.log.html' %>
+# Get all missing files for <%= child_node %>:
+wget --recursive --level=20 --no-host-directories --cut-dirs=2 --no-parent --reject "index.html*" <%=File.join 'http://', conf.server, '__missing__', child_node %>
+<% end %><% end %>
+# Put some files into <%= File.join conf.root, '__index__/' %> to have them served at <%= File.join 'http://', conf.server, '__index__/'  %>
+
+# The master (<%= conf.server %>) proxies requests for missing files to the childs (<%= conf.child_nodes %>) by round-robin, one after another until the file is found. That means that you can delete files from the master and still have the downloading of missing files and the provisioning of new boxes working. To delete files older than 7 days:
+find <%= conf.root %> -type f -mtime +5 -exec rm {} \;
+# You can then remove empty folders:
+find <%= conf.root %> -type d -empty -exec rmdir {} \;
+
+# If you want MP3 previews use HEAD and GET/Range requests:
+curl -XHEAD <%=File.join 'http://', conf.server, conf.path_prefix, 'some/path/file.mp3' %>
+curl -H Range:bytes=0-100000,2000000-2100000,3949024-4049024 <%=File.join 'http://', conf.server, conf.path_prefix, 'some/path/file.mp3' %> | mpg123 -
+EOR
+
+conf.readme = ERB.new(conf.readme).result()
+
+$stderr.puts conf.readme
+
+puts "## GENERATED FILE. DO NOT EDIT MANUALLY! ##"
+puts ERB.new(File.read template_file).result()

@@ -1,0 +1,174 @@
+# template variables:
+# server:         <%= conf.server %>
+# root:           <%= conf.root %>
+# path_prefix     <%= conf.path_prefix %>
+# child_nodes:    <%= conf.child_nodes %>
+# log_dir:        <%= conf.log_dir %>
+# pid:            <%= conf.pid %>
+# user:           <%= conf.user %>
+# max_body_size:  <%= conf.max_body_size %>
+
+# user www-data;
+worker_processes <%= conf.child_nodes.size + 1 %>;
+
+daemon  off;
+
+error_log <%= File.join conf.log_dir, "#{conf.server}.error.log" %>;
+pid       <%= conf.pid %>;
+
+events {
+  worker_connections 1024;
+}
+
+http {
+  log_format enhanced '$remote_addr - $remote_user [$time_local]  '
+                      '"$request_method $hostname:$server_port$uri" $status $body_bytes_sent '
+                      '"$http_referer" "$http_user_agent"';
+  
+  access_log <%= File.join conf.log_dir, "#{conf.server}.access.log" %> enhanced;
+  
+  server_tokens off;
+  max_ranges 10;
+  ignore_invalid_headers on;
+  client_header_timeout 60;
+  client_body_timeout 60;
+  keepalive_timeout  30;
+  keepalive_requests 50;
+  
+  client_max_body_size <%= conf.max_body_size %>;
+  client_body_buffer_size <%= conf.max_body_size %>;
+  client_body_in_single_buffer on;
+  
+  proxy_next_upstream error timeout http_404;
+  proxy_connect_timeout 10s;
+  proxy_read_timeout 10s;
+  proxy_send_timeout 10s;
+  
+  <% unless conf.child_nodes.empty? %>
+  ## CHILD NODES ##
+  upstream all_child_nodes {
+    <% conf.child_nodes.each do |child_node| %>
+      server <%= child_node %>;
+    <% end %>
+  }
+  <% end %>
+  
+  default_type text/html;
+  types {
+    text/plain txt;
+    text/html html;
+    audio/mpeg mp3;
+  }
+  
+  server {
+    listen <%= conf.server %>;
+    
+    location ~ .*favicon.ico$ { echo ''; }
+    
+    <% unless conf.child_nodes.empty? %>
+      # wrap the upstream in a location so it can be used by try_files
+      location @all_child_nodes {
+        proxy_pass http://all_child_nodes;
+      }
+      
+      <% conf.child_nodes.each do |child_node| %>
+      location /<%= child_node %> {
+          internal;
+          proxy_pass http://<%= child_node %>/;
+      }
+      <% end %>
+    <% end %>
+    
+    
+    location = /__readme.txt {
+      echo '<%= conf.readme %>';
+    }
+    
+    
+    location /__index__ {
+      if ($request_method != GET ) { return 405; }
+      root <%= conf.root %>/;
+      autoindex on;
+    }
+    
+    
+    location /__missing__ {
+      if ($request_method != GET ) { return 405; }
+      root <%= conf.root %>/;
+      autoindex on;
+    }
+    
+    
+    location <%= conf.path_prefix %> {
+      if ($request_method !~ ^(GET|HEAD|PUT|DELETE)$ ) { return 405; }
+      root <%= conf.root %>/;
+      
+      autoindex on;
+      ## GET ##
+      <%= 'try_files $uri $uri/ @all_child_nodes;' unless conf.child_nodes.empty? %>
+      
+      
+      ## PUT ##
+      if ($request_method = 'PUT') {
+        lua_need_request_body on;
+        content_by_lua '
+<%= lua_util_functions %>
+          
+          local dir = "<%= conf.root %>" .. ngx.var.uri:gsub("[%d%a_-]+%.[%d%a_-]+$", "")
+          os.execute("mkdir -p " .. dir)
+          local file = io.open("<%= conf.root %>" .. ngx.var.uri, "w")
+            file:write(ngx.var.request_body)
+            file:seek("set")
+            local filesize = file:seek("end")
+          file:close()
+          
+          if filesize == string.len(ngx.var.request_body) then
+            ngx.status = ngx.HTTP_CREATED
+            ngx.say("success: <%= conf.server %>" .. ngx.var.uri .. " stored: " .. filesize .. "bytes")
+          else
+            ngx.status = ngx.HTTP_INTERNAL_SERVER_ERROR
+            ngx.say("error: <%= conf.server %>" .. ngx.var.uri .. " stored " .. filesize .. "bytes but should store " .. string.len(ngx.var.request_body) .. " bytes")
+          end
+          
+          <% conf.child_nodes.each do |child_node| %>
+          local res = ngx.location.capture("/<%= child_node %>" .. ngx.var.uri, { method = ngx.HTTP_PUT, body =  ngx.var.request_body })
+          if res.status == ngx.HTTP_CREATED then
+            ngx.print(res.body)
+          else
+            local error = "error: <%= child_node %>" .. linkify(ngx.var.uri) .. " failed to store: " .. res.status
+            ngx.say(error)
+            log_error("<%= child_node %>", error)
+          end;
+          <% end %>
+        ';
+      }
+      
+      
+      ## DELETE ##
+      if ($request_method = 'DELETE') {
+        content_by_lua '
+<%= lua_util_functions %>
+          
+          if os.remove("<%= conf.root %>" .. ngx.var.uri) then
+            ngx.status = ngx.HTTP_OK
+            ngx.say("success: <%= conf.server %>" .. ngx.var.uri .. " removed")
+          else
+            ngx.status = ngx.HTTP_INTERNAL_SERVER_ERROR
+            ngx.say("error: <%= conf.server %>" .. ngx.var.uri .. " failed to remove")
+          end;
+          
+          <% conf.child_nodes.each do |child_node| %>
+          local res = ngx.location.capture("/<%= child_node %>" .. ngx.var.uri, { method = ngx.HTTP_DELETE })
+          if res.status == ngx.HTTP_OK then
+            ngx.print(res.body)
+          else
+            local error = "error: <%= child_node %>" .. ngx.var.uri .. " failed to remove: " .. res.status
+            ngx.say(error)
+            log_error("<%= child_node %>", error)
+          end;
+          <% end %>
+        ';
+      }
+    }
+  }
+}
