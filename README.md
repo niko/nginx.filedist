@@ -43,6 +43,7 @@ Techical Details
 * PUTs and DELETEs which fail to get broadcasted to a child nodes are written as HTML log to a file at `/__missing__` which then can be crawled (e.g. by wget) to catch up.
 * For provisioning of a new machine you can generate one (or many) html file with links to all the files and put it into `/__index__`. How the file is created depends on your needs. This file can then be crawled (e.g. by wget). Consider throttling wget when doing this.
 * Example commands for PUT and DELETE, catch up and provisioning are available at `/__readme.txt`
+* Remaining empty directories must be cleaned by find commands (see `/__readme.txt`).
 
 The bad and the ugly
 --------------------
